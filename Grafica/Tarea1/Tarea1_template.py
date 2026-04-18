@@ -1,4 +1,5 @@
 # LIBRERIAS externas
+import pyglet
 from pyglet.graphics.shader import Shader, ShaderProgram
 from pyglet.window import Window, key
 from pyglet.gl import *
@@ -68,6 +69,7 @@ if __name__ == "__main__":
 
     controller = Controller(800, 800, "Tarea_1")
 
+    # Vertex Shd
     vert_source = """
     #version 330
 
@@ -82,6 +84,8 @@ if __name__ == "__main__":
         alpha = ttl / 3.0;
     }
     """
+
+    # Fragment Shd
     frag_source = """
     #version 330
 
@@ -95,9 +99,9 @@ if __name__ == "__main__":
     """
 
     # Dos pipelines
-    pipelineIzq = pyglet.graphics.shader.ShaderProgram(vert_source, frag_source)
-
-    pipelineDer = pyglet.graphics.shader.ShaderProgram(vert_source, frag_source)
+    pipelineIzq = ShaderProgram(Shader(vert_source, "vertex"), Shader(frag_source, "fragment"))
+    
+    pipelineDer = ShaderProgram(Shader(vert_source, "vertex"), Shader(frag_source, "fragment"))
 
     # Defina las figuras para los cañones
     
@@ -115,6 +119,10 @@ if __name__ == "__main__":
         
 
         # Aquí debe selecicionar el pipeline que usara y luego dibujar sus cosas...
+        pipelineIzq.use()
+
+        if controller.particles_gpu_object is not None:
+            controller.particles_gpu_object.draw(GL_POINTS)
 
 
 
@@ -126,6 +134,11 @@ if __name__ == "__main__":
     def on_key_press(symbol, modifiers):
         if symbol == key.A:
             print("Presionaste A!")
+            # Generar particula Izq
+        
+        elif symbol == key,D:
+            print('Presionaste D :(')
+            # Generar particula Der
 
         # Use esta función de Pyglet para generar sus partículas.
 
@@ -136,7 +149,7 @@ if __name__ == "__main__":
     def update_particle_system(dt, controller):
 
         # Estudie el aux 3 para entender bien este paso.
-        controller.particles_gpu_object = pipeline.vertex_list( len(controller.particles), GL_POINTS )
+        controller.particles_gpu_object = pipelineIzq.vertex_list( len(controller.particles), GL_POINTS )
             
         pos = []
         ttls = []
