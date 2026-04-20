@@ -20,6 +20,9 @@ from collections import deque
 ## Variables Globales ##
 #  acel de gravedad
 G = -1
+# TTL particulas
+ttl_light = 0.7
+ttl_heavy = 3.0
 
 # Controla la ventana y el paso del tiempo
 class Controller(Window):
@@ -123,23 +126,20 @@ if __name__ == "__main__":
     uniform float u_ttl_max;
 
     in vec3 position;
-    in float intensity;
     in float ttl;
 
     vec4 colorA = vec4(0.0, 0.0, 1.0, 1.0);
     vec4 colorB = vec4(1.0, 0.0, 0.0, 1.0);
 
     out vec4 fragColor;
-    out float fragIntensity;
 
     void main()
     {
         float pct = 1.0 - (ttl / u_ttl_max);
         vec4 color = mix(colorA, colorB, pct);
 
-        gl_PointSize = 30.0 * (ttl / u_ttl_max);
+        gl_PointSize = (1/u_ttl_max) * 50;
         fragColor = color;
-        fragIntensity = intensity;
         gl_Position = vec4(position, 1.0f);
     }
     """
@@ -149,7 +149,6 @@ if __name__ == "__main__":
     #version 330
 
     in vec4 fragColor;
-    in float fragIntensity;
     out vec4 outColor;
 
     void main()
@@ -234,18 +233,18 @@ if __name__ == "__main__":
         
 
         # Seleccionar pipeline y dibujar
-        pipelineCannon.use()
-        gpu_cannonIzq.draw(GL.GL_TRIANGLES)
-        gpu_cannonDer.draw(GL.GL_TRIANGLES)
-
         if controller.particlesLight_gpu_object is not None:
             pipelineAmmo.use()
-            pipelineAmmo['u_ttl_max'] = 2.0
+            pipelineAmmo['u_ttl_max'] = ttl_light
             controller.particlesLight_gpu_object.draw(GL_POINTS)
         if controller.particlesHeavy_gpu_object is not None:
             pipelineAmmo.use()
-            pipelineAmmo['u_ttl_max'] = 5.0
+            pipelineAmmo['u_ttl_max'] = ttl_heavy
             controller.particlesHeavy_gpu_object.draw(GL_POINTS)
+
+        pipelineCannon.use()
+        gpu_cannonIzq.draw(GL.GL_TRIANGLES)
+        gpu_cannonDer.draw(GL.GL_TRIANGLES)
 
 
 
@@ -258,7 +257,7 @@ if __name__ == "__main__":
                 np.array([-0.9,-0.9,0]),                                        # PosInicial
                 np.array([np.random.uniform(0.8,1.0),np.random.uniform(0.8,1.0),0]),# VelInicial
                 1,                                                              # si tiene masa o no
-                1.0                                                             # TTL
+                ttl_heavy
             ))
         
         elif symbol == key.D:
@@ -268,7 +267,7 @@ if __name__ == "__main__":
                 np.array([0.9, -0.9, 0]),
                 np.array([np.random.uniform(-0.8,-1.0),np.random.uniform(0.8,1.0),0]),
                 0,
-                2.0                                                             # ttl mas larga
+                ttl_light
             ))
 
     # Aquí se actualiza todo el sistema de partículas
@@ -278,6 +277,7 @@ if __name__ == "__main__":
         to_removeHeavy = 0
         to_removeLight = 0
         
+        # con masa
         for i in range(len(controller.particlesHeavy)):
             p = controller.particlesHeavy[i]
             p.step(dt)
@@ -286,8 +286,12 @@ if __name__ == "__main__":
 
         for i in range(to_removeHeavy):
             controller.particlesHeavy.popleft()
+        
+        if controller.particlesHeavy_gpu_object is not None:
+            controller.particlesHeavy_gpu_object.delete()
+            controller.particlesHeavy_gpu_object = None
 
-
+        # sin masa
         for i in range(len(controller.particlesLight)):
             p = controller.particlesLight[i]
             p.step(dt)
@@ -297,12 +301,11 @@ if __name__ == "__main__":
         for i in range(to_removeLight):
             controller.particlesLight.popleft()
 
-
-        if (controller.particlesLight_gpu_object and controller.particlesHeavy_gpu_object)  is not None:
+        if controller.particlesLight_gpu_object is not None:
             controller.particlesLight_gpu_object.delete()
-            controller.particlesHeavy_gpu_object.delete()
             controller.particlesLight_gpu_object = None
-            controller.particlesHeavy_gpu_object = None
+
+        
 
         # si hay partículas vivas, hay que copiarlas a la GPU
         # mnunición con masa
@@ -311,43 +314,31 @@ if __name__ == "__main__":
                 len(controller.particlesHeavy),
                 GL_POINTS
                 )
-            
+
             posHeavy = []
             ttlsHeavy = []
-            colsHeavy = []
-            intesHeavy = []
             for p in controller.particlesHeavy:
                 posHeavy += p.position.tolist()
                 ttlsHeavy.append(p.ttl)
-                colsHeavy += [0, 0, 1.0]
-                intesHeavy.append(1.0)
 
             controller.particlesHeavy_gpu_object.position[:] = np.array(posHeavy, dtype=np.float32)
             controller.particlesHeavy_gpu_object.ttl[:] = np.array(ttlsHeavy, dtype=np.float32)
-#            controller.particlesHeavy_gpu_object.colors[:] = np.array(colsHeavy, dtype=np.float32)
-            controller.particlesHeavy_gpu_object.intensity[:] = np.array(intesHeavy, dtype = np.float32)
 
 
         # municion sin masa
         if len(controller.particlesLight) > 0:
-            controller.particlesLight_gpu_object = pipelineCannon.vertex_list(
+            controller.particlesLight_gpu_object = pipelineAmmo.vertex_list(
                 len(controller.particlesLight),
                 GL_POINTS)
             
             posLight = []
             ttlsLight = []
-            colsLight = []
-            intesLight = []
             for p in controller.particlesLight:
                 posLight += p.position.tolist()
                 ttlsLight.append(p.ttl)
-                colsLight += [0, 0, 1.0]
-                intesLight.append(1.0)
 
             controller.particlesLight_gpu_object.position[:] = np.array(posLight, dtype=np.float32)
             controller.particlesLight_gpu_object.ttl[:] = np.array(ttlsLight, dtype=np.float32)
-#            controller.particlesLight_gpu_object.colors[:] = np.array(colsLight, dtype=np.float32)
-            controller.particlesLight_gpu_object.intensity[:] = np.array(intesLight, dtype = np.float32)
 
     clock.schedule(update_particle_system, controller)
     run()
