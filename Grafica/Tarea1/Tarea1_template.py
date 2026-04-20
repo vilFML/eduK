@@ -114,54 +114,10 @@ if __name__ == "__main__":
     }
     """
 
-
-
-    ## Particulas ##
-    # Vertex Shd
-    vert_source_ammo = """
-    #version 330
-
-    in vec3 position;
-    in vec3 colors;
-    in float intensity;
-    in float ttl;
-
-    out vec3 fragColor;
-    out float fragIntensity;
-    out float alpha;
-
-    void main()
-    {
-        alpha = ttl / 3.0;
-        gl_PointSize = 15.0 * (ttl / 3.0);
-        fragColor = colors;
-        fragIntensity = intensity;
-        gl_Position = vec4(position, 1.0f);
-    }
-    """
-
-    # Fragment Shd
-    frag_source_ammo = """
-    #version 330
-
-    in vec3 fragColor;
-    in float fragIntensity;
-    in float alpha;
-
-    out vec4 outColor;
-
-    void main()
-    {
-        outColor = fragIntensity * vec4(fragColor, alpha);
-    }
-    """
-
     # Dos pipelines
     pipelineIzq = ShaderProgram(Shader(vert_source_cannon, "vertex"), Shader(frag_source_cannon, "fragment"))
     
     pipelineDer = ShaderProgram(Shader(vert_source_cannon, "vertex"), Shader(frag_source_cannon, "fragment"))
-
-    pipelineAmmo = ShaderProgram(Shader(vert_source_ammo, "vertex"), Shader(frag_source_ammo, "fragment"))
 
     ### Definiciones de Figuras ###
     # Vertices
@@ -221,7 +177,6 @@ if __name__ == "__main__":
     gpu_cannonDer.intensity = intensities
 
     # Municion
-    gpu_ammoIzq = pipelineAmmo
     
 
     @controller.event
