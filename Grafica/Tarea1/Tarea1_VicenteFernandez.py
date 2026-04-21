@@ -21,8 +21,8 @@ from collections import deque
 #  acel de gravedad
 G = -1
 # TTL particulas
-ttl_light = 0.7
-ttl_heavy = 3.0
+ttl_light = 2.0
+ttl_heavy = 4.0
 
 # Controla la ventana y el paso del tiempo
 class Controller(Window):
@@ -59,7 +59,7 @@ class Particle():
         
         self.ttl = ttl
 
-    # Cada frame se actualiza la posicion, velocidad (si tiene masa) y tu ttl
+    # Cada frame se actualiza la posicion, velocidad (si tiene masa) y su ttl
     def step(self, dt):
         # se reduce el ttl
         self.ttl -= dt
@@ -138,7 +138,7 @@ if __name__ == "__main__":
         float pct = 1.0 - (ttl / u_ttl_max);
         vec4 color = mix(colorA, colorB, pct);
 
-        gl_PointSize = (1/u_ttl_max) * 50;
+        gl_PointSize = (3 / u_ttl_max) * 20;
         fragColor = color;
         gl_Position = vec4(position, 1.0f);
     }
@@ -222,7 +222,7 @@ if __name__ == "__main__":
 
     @controller.event
     def on_draw():
-        # Limpia pantalla y la coloca en el color determinado (no la modifico)
+        # Limpia pantalla y la coloca en el color determinado
         glClearColor(0.8,0.9,1,1)
         controller.clear()
 
@@ -230,7 +230,6 @@ if __name__ == "__main__":
         glEnable(GL_PROGRAM_POINT_SIZE)
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        
 
         # Seleccionar pipeline y dibujar
         if controller.particlesLight_gpu_object is not None:
@@ -250,25 +249,39 @@ if __name__ == "__main__":
 
     @controller.event
     def on_key_press(symbol, modifiers):
+        global G
+
         if symbol == key.A:
-            print("Presionaste A!")
             # Generar particula Izq
             controller.particlesHeavy.append(Particle(
                 np.array([-0.9,-0.9,0]),                                        # PosInicial
-                np.array([np.random.uniform(0.8,1.0),np.random.uniform(0.8,1.0),0]),# VelInicial
+                np.array([np.random.uniform(0.9,1.1),np.random.uniform(0.9,1.1),0]),# VelInicial
                 1,                                                              # si tiene masa o no
                 ttl_heavy
             ))
         
         elif symbol == key.D:
-            print('Presionaste D :(')
             # Generar particula Der
             controller.particlesLight.append(Particle(
                 np.array([0.9, -0.9, 0]),
-                np.array([np.random.uniform(-0.8,-1.0),np.random.uniform(0.8,1.0),0]),
+                np.array([np.random.uniform(-0.7,-0.9),np.random.uniform(0.7,0.9),0]),
                 0,
                 ttl_light
             ))
+        
+        elif symbol == key.DOWN:
+            if (G >= 0):
+                print('Gravedad mínima alcanzada.')
+            elif (G < 0):
+                print('Disminuye la gravedad!')
+                G += 0.1
+
+        elif symbol == key.UP:
+            if (G <= -2.0):
+                print('Gravedad máxima alcanzada.')
+            elif (G > -2.0):
+                print('Aumenta la gravedad!')
+                G -= 0.1
 
     # Aquí se actualiza todo el sistema de partículas
     def update_particle_system(dt, controller):
