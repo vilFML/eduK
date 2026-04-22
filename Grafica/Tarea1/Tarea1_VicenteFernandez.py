@@ -22,7 +22,7 @@ from collections import deque
 G = -1
 # TTL particulas
 ttl_light = 2.0
-ttl_heavy = 4.0
+ttl_heavy = 1.0
 
 # Controla la ventana y el paso del tiempo
 class Controller(Window):
@@ -31,8 +31,8 @@ class Controller(Window):
 
         ### Variables globales ###
         # Tamaño ventana
-        self.width = 600
-        self.height = 600
+        self.width = 800
+        self.height = 800
 
         # Inicio de ventana temporal
         self.time = 0
@@ -49,11 +49,13 @@ class Controller(Window):
 # Objeto particula
 class Particle():
 
-    def __init__(self, position, velocity, masa, ttl):
+    def __init__(self, position, velocity, colorIni, masa, ttl):
 
         self.position = np.array(position, dtype=np.float32)
 
         self.velocity = np.array(velocity, dtype = np.float32)
+
+        self.colorIni = colorIni
 
         self.masa = masa
         
@@ -91,11 +93,9 @@ if __name__ == "__main__":
 
     out vec3 fragColor;
     out float fragIntensity;
-    out float alpha;
 
     void main()
     {
-        alpha = 1.0;
         gl_PointSize = 15.0 * (ttl / 3.0);
         fragColor = colors;
         fragIntensity = intensity;
@@ -114,7 +114,7 @@ if __name__ == "__main__":
 
     void main()
     {
-        outColor = fragIntensity * vec4(fragColor, alpha);
+        outColor = fragIntensity * vec4(fragColor, 1.0);
     }
     """
 
@@ -127,18 +127,18 @@ if __name__ == "__main__":
 
     in vec3 position;
     in float ttl;
+    in vec4 colorIni;
 
-    vec4 colorA = vec4(0.0, 0.0, 1.0, 1.0);
-    vec4 colorB = vec4(1.0, 0.0, 0.0, 1.0);
+    vec4 colorFin = vec4(0.0, 0.0, 1.0, 1.0);
 
     out vec4 fragColor;
 
     void main()
     {
         float pct = 1.0 - (ttl / u_ttl_max);
-        vec4 color = mix(colorA, colorB, pct);
+        vec4 color = mix(colorIni, colorFin, pct);
 
-        gl_PointSize = (3 / u_ttl_max) * 20;
+        gl_PointSize = u_ttl_max * 20;
         fragColor = color;
         gl_Position = vec4(position, 1.0f);
     }
@@ -149,6 +149,7 @@ if __name__ == "__main__":
     #version 330
 
     in vec4 fragColor;
+
     out vec4 outColor;
 
     void main()
@@ -163,7 +164,7 @@ if __name__ == "__main__":
     pipelineAmmo = ShaderProgram(Shader(vert_source_ammo, "vertex"), Shader(frag_source_ammo, "fragment"))
 
     ### Definiciones de Figuras ###
-    # Vertices
+    ## Vertices
     # Cañon Izquierdo
     positionsIzq = np.array([
         -1, -1, 0,
@@ -180,7 +181,7 @@ if __name__ == "__main__":
     ], dtype= np.float32)
 
 
-    # Indices
+    ## Indices
     indexIzq = np.array([
         0, 1, 2,
         2, 3, 0
@@ -191,7 +192,7 @@ if __name__ == "__main__":
         2, 3, 0
     ], dtype = np.uint32)
 
-    # Colores
+    ## Colores
     colors = np.array([
         1,1,1,
         1,1,1,
@@ -199,7 +200,7 @@ if __name__ == "__main__":
         1,1,1
     ], dtype = np.float32)
 
-    # Intensidad vértices
+    ## Intensidad vértices
     intensities = np.array([
         1,
         1,
@@ -249,13 +250,14 @@ if __name__ == "__main__":
 
     @controller.event
     def on_key_press(symbol, modifiers):
-        global G
+        global G                                                                # Para poder modificar variable global G
 
         if symbol == key.A:
             # Generar particula Izq
             controller.particlesHeavy.append(Particle(
                 np.array([-0.9,-0.9,0]),                                        # PosInicial
                 np.array([np.random.uniform(0.9,1.1),np.random.uniform(0.9,1.1),0]),# VelInicial
+                np.array([1.0, 0.0, 0.0, 1.0]),                                           # color inicial de la municion
                 1,                                                              # si tiene masa o no
                 ttl_heavy
             ))
@@ -265,6 +267,7 @@ if __name__ == "__main__":
             controller.particlesLight.append(Particle(
                 np.array([0.9, -0.9, 0]),
                 np.array([np.random.uniform(-0.7,-0.9),np.random.uniform(0.7,0.9),0]),
+                np.array([0.0, 1.0, 0.0, 1.0]),
                 0,
                 ttl_light
             ))
@@ -320,8 +323,8 @@ if __name__ == "__main__":
 
         
 
-        # si hay partículas vivas, hay que copiarlas a la GPU
-        # mnunición con masa
+        # si hay partículas vivas, copiarlas a la GPU
+        # munición con masa
         if len(controller.particlesHeavy) > 0:
             controller.particlesHeavy_gpu_object = pipelineAmmo.vertex_list(
                 len(controller.particlesHeavy),
@@ -330,12 +333,15 @@ if __name__ == "__main__":
 
             posHeavy = []
             ttlsHeavy = []
+            colorsHeavy = []
             for p in controller.particlesHeavy:
                 posHeavy += p.position.tolist()
                 ttlsHeavy.append(p.ttl)
+                colorsHeavy += list(p.colorIni)
 
             controller.particlesHeavy_gpu_object.position[:] = np.array(posHeavy, dtype=np.float32)
             controller.particlesHeavy_gpu_object.ttl[:] = np.array(ttlsHeavy, dtype=np.float32)
+            controller.particlesHeavy_gpu_object.colorIni[:] = np.array(colorsHeavy, dtype=np.float32)
 
 
         # municion sin masa
@@ -346,12 +352,15 @@ if __name__ == "__main__":
             
             posLight = []
             ttlsLight = []
+            colorsLight = []
             for p in controller.particlesLight:
                 posLight += p.position.tolist()
                 ttlsLight.append(p.ttl)
+                colorsLight += list(p.colorIni)
 
             controller.particlesLight_gpu_object.position[:] = np.array(posLight, dtype=np.float32)
             controller.particlesLight_gpu_object.ttl[:] = np.array(ttlsLight, dtype=np.float32)
+            controller.particlesLight_gpu_object.colorIni[:] = np.array(colorsLight, dtype=np.float32)
 
     clock.schedule(update_particle_system, controller)
     run()
