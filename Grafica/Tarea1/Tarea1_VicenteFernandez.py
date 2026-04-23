@@ -21,8 +21,8 @@ from collections import deque
 #  acel de gravedad
 G = -1
 # TTL particulas
-ttl_light = 2.0
-ttl_heavy = 1.0
+ttl_light = 4.0
+ttl_heavy = 1.5
 
 # Controla la ventana y el paso del tiempo
 class Controller(Window):
@@ -45,7 +45,6 @@ class Controller(Window):
         self.particlesHeavy_gpu_object = None
 
 
-
 # Objeto particula
 class Particle():
 
@@ -58,7 +57,7 @@ class Particle():
         self.colorIni = colorIni
 
         self.masa = masa
-        
+
         self.ttl = ttl
 
     # Cada frame se actualiza la posicion, velocidad (si tiene masa) y su ttl
@@ -66,13 +65,15 @@ class Particle():
         # se reduce el ttl
         self.ttl -= dt
 
-        # actualiza la pos
-        self.position += self.velocity * dt
-
         # actualizar vel si tiene masa, si no: cte
         if self.masa == 1:
             self.velocity[1] = self.velocity[1] + G * dt
+        else:
+            self.velocity[1] = self.velocity[1] + (0.1 * G) * dt
 
+
+        # actualiza la pos
+        self.position += self.velocity * dt
 
     # Funcion que entrega si particula esta viva
     def alive(self):
@@ -256,7 +257,7 @@ if __name__ == "__main__":
             # Generar particula Izq
             controller.particlesHeavy.append(Particle(
                 np.array([-0.9,-0.9,0]),                                        # PosInicial
-                np.array([np.random.uniform(0.9,1.1),np.random.uniform(0.9,1.1),0]),# VelInicial
+                np.array([np.random.uniform(1.0,1.2),np.random.uniform(1.0,1.2),0]),# VelInicial
                 np.array([1.0, 0.0, 0.0, 1.0]),                                           # color inicial de la municion
                 1,                                                              # si tiene masa o no
                 ttl_heavy
@@ -266,23 +267,23 @@ if __name__ == "__main__":
             # Generar particula Der
             controller.particlesLight.append(Particle(
                 np.array([0.9, -0.9, 0]),
-                np.array([np.random.uniform(-0.7,-0.9),np.random.uniform(0.7,0.9),0]),
+                np.array([np.random.uniform(-0.5,-0.6),np.random.uniform(0.5,0.6),0]),
                 np.array([0.0, 1.0, 0.0, 1.0]),
                 0,
                 ttl_light
             ))
         
         elif symbol == key.DOWN:
-            if (G >= 0):
+            if (G >= 1.0):
                 print('Gravedad mínima alcanzada.')
-            elif (G < 0):
+            else:
                 print('Disminuye la gravedad!')
                 G += 0.1
 
         elif symbol == key.UP:
-            if (G <= -2.0):
+            if (G <= -5.0):
                 print('Gravedad máxima alcanzada.')
-            elif (G > -2.0):
+            else:
                 print('Aumenta la gravedad!')
                 G -= 0.1
 
