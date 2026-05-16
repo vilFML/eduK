@@ -1,3 +1,3 @@
 # edukk
 
-Any lecture/class/tutorial.
+Any lecture/class/tutorial i do.
