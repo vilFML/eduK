@@ -44,8 +44,8 @@ class MyCam(FreeCamera):
 
 class Personaje:
     def __init__(self, position, velocity):
-        self.position = position
-        self.velocity = velocity
+        self.pos = np.array(position, dtype=np.float32)
+        self.vel = np.array(velocity, dtype=np.float32)
 
 #funcion para tener coordenadas uv a partir de pos en img
 # indicar izq inferior, asume sectores de 16x16 pixeles
@@ -105,10 +105,11 @@ void main() {
     root = os.path.dirname(__file__)
 
     # Movimiento/ camara
-    
-    prota = Personaje(0.0, 0.0)                                                 # pos inicial: Origen, vel ini: Reposo
+    posIni = np.array([0.0, 0.0, 0.0])
+    velIni = np.array([0.0, 0.0, 0.0])
+    prota = Personaje(posIni, velIni)                                           # pos inicial: Origen, vel ini: Reposo
 
-    cam_z = 0.2                                                                # distancia inicial de la camara
+    cam_z = 0.2                                                                 # distancia inicial de la camara
     zoom =  0.1                                                                 # esto se le modificara a z de cam
 
     cam = MyCam([0,0,cam_z])                                                    # camara inicia en z=1
@@ -173,7 +174,7 @@ void main() {
 
     ### Grafo ###
     #definir profundidades para cada nivel
-    z_fondo=  -1.0
+    z_fondo=-1.0
     z_pj=   z_fondo + 0.2
     z_med=  z_pj + 0.2
     z_near= z_med + 0.2
@@ -319,15 +320,20 @@ void main() {
 
         # A,S cambian la direccion de mov del pj
         if symbol == key.A:
-            prota.velocity = -1
+            prota.vel[0] = -1
         if symbol == key.D:
-            prota.velocity = +1
+            prota.vel[0] = +1
+
+        # salto con space
+        if symbol == key.SPACE:
+            if (prota.pos[1] == 0.0):                                           # impulso solo una vez (cuando esta en medio)
+                    prota.vel[1] = 2.5
 
     @controller.event
     def on_key_release(symbol, modifiers):
         # soltar las teclas devuelve al reposo al pj
         if (symbol==key.A or symbol==key.D):
-            prota.velocity = 0
+            prota.vel[0] = 0
 
     #Informacion que se actualiza con el tiempo
     def update(dt):
@@ -336,12 +342,22 @@ void main() {
         world.update()
         cam.time_update(dt)
 
-        # actualizar pos de pj
-        prota.position += prota.velocity * dt                                   # se le entrega cambio a instancia de pj
-        world['pj']['position'][0] = prota.position
+        # Bonus: agregar salto
+        if (prota.pos[1] > 0.0):                                                #vuelve solo si esta sobre horizonte
+            prota.vel[1] += -5.0*dt
 
-        # actualizar pos de cam
-        cam.position = [prota.position, 0.0, cam_z]
+        if (prota.pos[1] < 0):                                                  #al volver, se reinicia su pos y vel
+            prota.pos[1] = 0.0
+            prota.vel[1] = 0.0
+
+        prota.pos += prota.vel * dt                                             #actualizacion usual de cinematica
+
+        # se entrega cambio a instancia de pj
+        world['pj']['position'][0] = prota.pos[0]
+        world['pj']['position'][1] = prota.pos[1]
+
+        # actualizar pos de cam, solo seguir en eje X
+        cam.position = [prota.pos[0], 0.0, cam_z]
 
         c_pos = cam.position.copy()
         c_pos[1] = 0
