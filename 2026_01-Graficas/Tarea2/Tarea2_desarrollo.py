@@ -26,8 +26,9 @@ class Controller(Window):
 
 
 #CAMARA definida en una clase
+# class MyCam(OrbitCamera):
 class MyCam(FreeCamera):
-    def __init__(self, position=np.array([0, 0, 0]), camera_type="perspective"):
+    def __init__(self, position=np.array([0, 0, 0]), camera_type='perspective'):
         super().__init__(position, camera_type)
         self.direction = np.array([0,0,0])
         self.speed = 2
@@ -40,6 +41,11 @@ class MyCam(FreeCamera):
             dir /= dir_norm
         self.position += dir*self.speed*dt
         self.focus = self.position + self.forward
+
+class Personaje:
+    def __init__(self, position, velocity):
+        self.position = position
+        self.velocity = velocity
 
 #funcion para tener coordenadas uv a partir de pos en img
 # indicar izq inferior, asume sectores de 16x16 pixeles
@@ -99,22 +105,18 @@ void main() {
     root = os.path.dirname(__file__)
 
     # Movimiento/ camara
-    # Para el movimiento del personaje se va a usar un diccionario para almacenar sus
-    #   valores y modificarlos con la key
-    estado_pj = {'x':0.0, 'dir':0, 'vel':1.5}
+    
+    prota = Personaje(0.0, 0.0)                                                 # pos inicial: Origen, vel ini: Reposo
 
-    pos_cam =   1.0                                                             # distancia inicial de la camara
-    zoom =      0.1                                                             # esto se le modificara a z de cam
+    cam_z = 0.2                                                                # distancia inicial de la camara
+    zoom =  0.1                                                                 # esto se le modificara a z de cam
 
-    cam = MyCam([0,0,pos_cam])                                                  # camara inicia en z=1
+    cam = MyCam([0,0,cam_z])                                                    # camara inicia en z=1
 
     world = SceneGraph(cam)                                                     # inicio grafo con camara anterior
 
     # importado de texturas
-    Tileset = Texture(root + "/imgs/TileSet.png",sWrapMode=GL_REPEAT, tWrapMode=GL_REPEAT, minFilterMode=GL_NEAREST, maxFilterMode=GL_NEAREST)    # nearest para evitar bordes borrososs
-    aW = Tileset.width
-    aH = Tileset.height
-
+    atlas = Texture(root + "/imgs/TileSet.png",sWrapMode=GL_REPEAT, tWrapMode=GL_REPEAT, minFilterMode=GL_NEAREST, maxFilterMode=GL_NEAREST)    # nearest para evitar bordes borrosos
     Fondo = Texture(root + '/imgs/fondo1.png',sWrapMode=GL_REPEAT, tWrapMode=GL_REPEAT, minFilterMode=GL_NEAREST, maxFilterMode=GL_NEAREST)
     
     # Definicion de UVs
@@ -122,8 +124,8 @@ void main() {
     ##UVs 'manuales'
     uv_fondo = [
         0.0, 0.0,
-        10.0, 0.0,
-        10.0, 10.0,
+        20.0, 0.0,
+        20.0, 10.0,
         0.0, 10.0
     ]
     
@@ -141,17 +143,17 @@ void main() {
     ]
 
     ## uso de get_atlas_uv para texturas en Tileset
-    uv_roof = [*get_atlas_uv(7, 4, Tileset)]
+    uv_roof = [*get_atlas_uv(7, 4, atlas)]
 
-    uv_platfm_bot = [*get_atlas_uv(2,11, Tileset)]
-    uv_platfm_izq = [*get_atlas_uv(13,8, Tileset)]
-    uv_platfm_der = [*get_atlas_uv(13,8, Tileset)]
+    uv_platfm_bot = [*get_atlas_uv(2,11, atlas)]
+    uv_platfm_izq = [*get_atlas_uv(13,8, atlas)]
+    uv_platfm_der = [*get_atlas_uv(7,3, atlas)]
 
-    uv_front = [*get_atlas_uv(7,6,Tileset)]
+    uv_front = [*get_atlas_uv(7,6,atlas)]
     
     # Instanciacion cuadrados
     ## fondo
-    square_fondo = Model(shapes.Square["position"], uv_fondo, index_data=shapes.Square["indices"])
+    square_fondo = Model(shapes.Square["position"],uv_fondo, index_data=shapes.Square["indices"])
 
     ## personaje
     square_head = Model(shapes.Square["position"], uv_head, index_data=shapes.Square["indices"])
@@ -170,62 +172,70 @@ void main() {
 
 
     ### Grafo ###
-    # Campo lejano: solo fondo
+    #definir profundidades para cada nivel
+    z_fondo=  -1.0
+    z_pj=   z_fondo + 0.2
+    z_med=  z_pj + 0.2
+    z_near= z_med + 0.2
+
+    # Campo Lejano
+    world.add_node('Campo Lejano')
+    ## Fondo
     world.add_node('fondo',
+        attach_to=  'Campo Lejano',
         mesh=       square_fondo,
         pipeline=   pipeline,
         texture=    Fondo,
-        position=   [0.0, 0.0, 0.0],
-        scale=      [2.5, 2.5, 0.0]
-        )
+        position=   [0.0, 0.0, z_fondo],
+        scale=      [5.0, 2.5, 0.0])
 
-    #nodo (pj) -> |head| |torso|
+    # Campo Personaje
+    world.add_node('Campo PJ')
     world.add_node('pj',
-        position=   [0.0,0.0,0.1],
-        scale=      [0.1,0.1,0.0]
-        )
+        attach_to=  'Campo PJ',
+        position=   [0.0,0.0,z_pj],
+        scale=      [0.1,0.1,0.0])
 
     world.add_node("head",
         attach_to=  'pj',
         mesh=       square_head,
         pipeline=   pipeline,
-        texture=    Tileset,
+        texture=    atlas,
         position=   [0.0, 0.45, 0.0])
     world.add_node('torso',
         attach_to=  'pj',
         mesh=       square_torso,
         pipeline=   pipeline,
-        texture=    Tileset,
+        texture=    atlas,
         position=   [0.0, -0.45, 0.0])
 
 
-    #Campo medio: plataformas -> |top| |mid|
-    world.add_node('campoMed',
-        position=[0.0, 0.0, 0.15])
+    #Campo medio: roof y plataformas
+    world.add_node('Campo Medio',
+        position=[0.0, 0.0, z_med])
 
     ## techo
     world.add_node('roof',
-        attach_to='campoMed')
+        attach_to=  'Campo Medio')
 
-    for x in range (-10,10, 1):
+    for x in range (-15,15, 1):
         name = f'roof_{x}'                                                      #cada nodo es un cuadrado del techo
         world.add_node(name,
-            attach_to='roof',
-            mesh = square_roof,
-            pipeline=pipeline,
-            texture=Tileset,
-            position=[x*0.1, 0.9, 0.0],
-            scale=[0.1, 0.35, 0]
-            )
+            attach_to=  'roof',
+            mesh =      square_roof,
+            pipeline=   pipeline,
+            texture=    atlas,
+            position=   [x*0.1, 0.8, 0.0],
+            scale=      [0.1, 0.35, 0])
 
     ## Plataformas
     world.add_node('plataforma',
-        attach_to='campoMed')
+        attach_to='Campo Medio')
 
     ### plataforma izq
     world.add_node('izq',
-        attach_to='plataforma',
-        position=[-0.5, 0.0, 0.0])
+        attach_to=  'plataforma',
+        position=   [-0.5, 0.0, 0.0])
 
     for x in range(-3, 3, 1):                                                   # se usa la misma lógica que en roof
         name = f'izq_{x}'
@@ -233,31 +243,30 @@ void main() {
             attach_to=  'izq',
             mesh=       square_platf_izq,
             pipeline=   pipeline,
-            texture=    Tileset,
+            texture=    atlas,
             position=   [x*0.1, 0.0, 0.0],
             scale=      [0.1,0.1,0]
             )
 
     ### platform der
     world.add_node('der',
-        attach_to='plataforma',
-        position=[0.5, 0.25, 0.0])
+        attach_to=  'plataforma',
+        position=   [1.5, 0.25, 0.0])
 
-    for x in range(-3, 4, 1):
+    for x in range(-3, 3, 1):
         name = f'der_{x}'
         world.add_node(name,
             attach_to=  'der',
-            mesh=       square_platf_izq,
+            mesh=       square_platf_der,
             pipeline=   pipeline,
-            texture=    Tileset,
+            texture=    atlas,
             position=   [x*0.1, 0.0, 0.0],
-            scale=      [0.1,0.1,0.0]
-            )
+            scale=      [0.1,0.1,0.0])
 
     ### platform bottom
     world.add_node('bottom',
-        attach_to='plataforma',
-        position=[0.2, -0.5, 0.0])
+        attach_to=  'plataforma',
+        position=   [0.2, -0.5, 0.0])
 
     for x in range(-5, 5, 1):
         name = f'bot_{x}'
@@ -265,27 +274,26 @@ void main() {
             attach_to=  'bottom',
             mesh=       square_platf_bot,
             pipeline=   pipeline,
-            texture=    Tileset,
+            texture=    atlas,
             position=   [x*0.1, 0.0, 0.0],
-            scale=      [0.1,0.1,0.0]
-            )
-
-
+            scale=      [0.1,0.1,0.0])
 
     # Campo cercano
-    world.add_node('front',
-        position=[0.0, 0.0, 0.2])
+    world.add_node('Campo Near',
+        position=   [0.0, 0.0, z_near])
+
+    world.add_node('Plants',
+        attach_to=  'Campo Near')
     
     for x in range(-3, 3, 1):
-        name = f'front_{x}'
+        name = f'plant_{x}'
         world.add_node(name,
-            attach_to=  'front',
+            attach_to=  'Plants',
             mesh=       square_front,
             pipeline=   pipeline,
-            texture=    Tileset,
-            position=   [x*0.5, -0.25, 0.0],
-            scale=      [0.25, 0.5, 0.0]
-            )
+            texture=    atlas,
+            position=   [x*0.5, -0.4, 0.0],
+            scale=      [0.25, 0.5, 0.0])
 
 
     @controller.event
@@ -301,41 +309,39 @@ void main() {
     #CAMARA vista en aux5
     @controller.event
     def on_key_press(symbol, modifiers):
-        global pos_cam
+        global cam_z
 
         # W,S modifican pos en z de cam
         if symbol == key.W:
-            pos_cam -= zoom
+            cam_z -= zoom
         if symbol == key.S:
-            pos_cam += zoom
+            cam_z += zoom
 
         # A,S cambian la direccion de mov del pj
         if symbol == key.A:
-            estado_pj['dir'] =  -1
+            prota.velocity = -1
         if symbol == key.D:
-            estado_pj['dir'] = 1
+            prota.velocity = +1
 
     @controller.event
     def on_key_release(symbol, modifiers):
         # soltar las teclas devuelve al reposo al pj
-        if symbol == key.A:
-            estado_pj['dir'] =  0
-        if symbol == key.D:
-            estado_pj['dir'] = 0
+        if (symbol==key.A or symbol==key.D):
+            prota.velocity = 0
 
     #Informacion que se actualiza con el tiempo
     def update(dt):
-        global pos_cam
+        global cam_z
 
         world.update()
         cam.time_update(dt)
 
         # actualizar pos de pj
-        estado_pj['x'] += estado_pj['dir'] * estado_pj['vel'] *dt               # se usa lógica de tarea1
-        world['pj']['position'][0] = estado_pj['x']                             # se le entrega cambio a instancia de pj
+        prota.position += prota.velocity * dt                                   # se le entrega cambio a instancia de pj
+        world['pj']['position'][0] = prota.position
 
         # actualizar pos de cam
-        cam.position = [estado_pj['x'], 0.0, pos_cam]
+        cam.position = [prota.position, 0.0, cam_z]
 
         c_pos = cam.position.copy()
         c_pos[1] = 0
