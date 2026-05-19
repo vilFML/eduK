@@ -42,6 +42,7 @@ class MyCam(FreeCamera):
         self.position += dir*self.speed*dt
         self.focus = self.position + self.forward
 
+#clase personaje para logica de movimiento
 class Personaje:
     def __init__(self, position, velocity):
         self.pos = np.array(position, dtype=np.float32)
@@ -112,7 +113,7 @@ void main() {
     cam_z = 0.2                                                                 # distancia inicial de la camara
     zoom =  0.1                                                                 # esto se le modificara a z de cam
 
-    cam = MyCam([0,0,cam_z])                                                    # camara inicia en z=1
+    cam = MyCam([0,0,cam_z])                                                    # inicio camara
 
     world = SceneGraph(cam)                                                     # inicio grafo con camara anterior
 
