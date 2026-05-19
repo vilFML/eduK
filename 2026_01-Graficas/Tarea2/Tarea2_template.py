@@ -26,7 +26,7 @@ class Controller(Window):
 
 
 #CAMARA definida en una clase
-class MyCam(FreeCamera):    
+class MyCam(FreeCamera):
     def __init__(self, position=np.array([0, 0, 0]), camera_type="perspective"):
         super().__init__(position, camera_type)
         self.direction = np.array([0,0,0])
