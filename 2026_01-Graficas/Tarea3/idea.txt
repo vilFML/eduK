@@ -1,0 +1,4 @@
+Idea tarea 3:
+Terreno (malla) inclinado, de distintas alturas en distintos puntos.
+Se seleccionan esferas de distinta rigidez para ser soltadas desde arriba y que lleguen a un punto.
+Las esferas brillan :)
