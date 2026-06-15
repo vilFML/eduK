@@ -1,3 +1,3 @@
-# edukk
+# eduK
 
-Any lecture/class/tutorial i do.
+Any lecture/class/tutorial project i do.
