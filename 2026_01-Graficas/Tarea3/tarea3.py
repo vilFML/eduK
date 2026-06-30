@@ -18,6 +18,27 @@ from utils.drawables import Model, DirectionalLight, Material
 
 from collections import deque
 
+#--------------------------------Constantes-------------------------------------#
+
+G = np.array([0.0, -9.8, 0.0], dtype=np.float32)                                #Y>0 es hacia arriba
+RADIO_PELOTAS = 0.2                                                             # radio visual de la esfera en escena
+
+MATERIALES = [                                                                  #array almacena materiales y props
+    #Material, bounciness, propVisuales
+    ('Madera', 0.25, Material(
+        ambient=[0.6, 0.3, 0.1],
+        diffuse=[0.6, 0.3, 0.1],
+        specular=[0.1, 0.1, 0.1],
+        shininess=2.0
+    )),
+    ('Goma', 0.75, Material(
+        ambient=[0.1, 0.8, 0.1],
+        diffuse=[0.1, 0.8, 0.1],
+        specular=[0.8, 0.8, 0.8],
+        shininess=32.0
+    ))
+]
+
 #--------------------------------Clases Sistema---------------------------------#
 
 class Controller(Window):
@@ -26,15 +47,12 @@ class Controller(Window):
         self.time = 0
         self.sky_color = np.array([0.2, 0.3, 0.5])
         self.intensity = 0.1
-        self.light_mode = False
-        self.light_dir = np.zeros(2)
-        self.light_color = np.ones(3)
-        self.light_distance = 1
         self.wireframe = False
 
-        self.pelotas = deque()                                                  #para contar pelotas actuales
-        self.pelota_count = 0                                                   #contador de pelotas
-        self.spawn_index = 1                                                    #para alternar pos de spawn
+        self.pelotas = deque()                                                  #pelotas que ya estan cayendo
+        self.cant_pelotas = 0                                                   #contador de pelotas
+        self.spawnPos_index = 1                                                 #para alternar pos de spawn
+        self.material_index = 0                                                 #indice para material seleccionado
 
 class MyCam(FreeCamera):
     def __init__(self, position=np.array([0, 0, 0]), camera_type="perspective"):
@@ -47,109 +65,114 @@ class MyCam(FreeCamera):
         self.focus = self.position + self.forward
 
 #----------------------------------Clases Propias---------------------------------------#
-#Pelota bajo gravedad
+#Pelota bajo gravedad, rebota con plataforma
 class Pelota:
-    def __init__(self, node_name, pos, vel, ttl, material_name):
+    def __init__(self, node_name, pos, restitution, ttl=5.0):
         self.node_name = node_name                                              #nombre en nodo de grafo
-        
-        self.ttl = ttl #[s]        
+        self.ttl = ttl #[s]
+
+        #prop geom
+        self.restitution = restitution                                          #depende de material: [0,1]
+        self.radio = RADIO_PELOTAS
+
 
         #cinematica
         self.pos = np.array(pos, dtype=np.float32)
-        self.vel = np.array(vel, dtype=np.float32)
-
-        self.material_name = material_name                                      #ej: 'madera','goma'
-
+        self.vel = np.zeros(3, dtype=np.float32)                                # pelota 'flotando' inicialmente
+        self.is_dropped = False                                                 #flota hasta apretar espacio
 
     #para actualizar cinematica
-    def step(self, dt):
-        self.ttl -= dt
-
+    def step(self, dt, plane_point, plane_normal):
+        if not self.is_dropped:                                                 #si aun no se suelta, hacer nada
+            return
+                
+        #cinematica
         self.vel += G*dt
         self.pos += self.vel*dt
 
-    #para ver si pelota esta viva
+        self.ttl -= dt
+
+        #colision con plataforma
+        d = np.dot(self.pos - plane_point, plane_normal)                        #dist centro-plano
+        if d<self.radio:                                                        #contacto con platfm
+            self.pos += plane_normal*(self.radio-d)                             #rebote
+
+            vn = np.dot(self.vel, plane_normal)                                 #componente normal de vel
+
+            if vn<0:
+                self.vel -= (1+self.restitution) * vn * plane_normal            #reflejar con restitucion en direccion respectiva
+
+    #fn activa caida
+    def drop(self):
+        self.is_dropped = True
+
+    #fn ver si pelota esta viva
     def alive(self):
         return bool(self.ttl>0)
 
-#--------------------------------Funciones-------------------------------------#
-def spawn_ball(world, controller, spawn_positions, ball_mesh_rubber, ball_mesh_metal):
-    """
-    Crea una nueva pelota en la posición de spawn seleccionada y la agrega
-    al SceneGraph y a la lista de pelotas activas del controller.
-    """
-    idx = controller.spawn_index
-    pos = spawn_positions[idx]["pos"].copy()
-    material_name = spawn_positions[idx]["material"]
 
-    # Alternamos material entre las dos opciones para variedad
-    # (en esta versión, cada posición tiene un material fijo asignado)
-    if material_name == "rubber":
-        mat = Material(ambient=[0.8, 0.1, 0.1], diffuse=[0.8, 0.1, 0.1])   # rojo
-        ball_mesh = ball_mesh_rubber
-    else:
-        mat = Material(ambient=[0.6, 0.6, 0.7], diffuse=[0.6, 0.6, 0.7])   # gris metálico
-        ball_mesh = ball_mesh_metal
 
-    # Velocidad inicial: cae directo hacia abajo
-    vel = [0.0, -0.5, 0.0]
-
-    name = f"ball-{controller.pelota_count}"
-    controller.pelota_count += 1
+#----------------------------------Funciones---------------------------------------#
+#fn crea pelota flotante en pos de spawn actual y la retorna
+def make_floating_ball():
+    pos = spawn_positions[controller.spawnPos_index].copy()
+    mat_name, restitution, mat = MATERIALES[controller.material_index]          #se crea con material asignado
+    name = "pelota_" + str(controller.cant_pelotas)
 
     world.add_node(
         name,
-        mesh=ball_mesh,
-        mode=GL_TRIANGLES,
+        attach_to='Pelotas',
+        mesh=mesh_ball,
         pipeline=flat_pipeline,
+        mode=GL_TRIANGLES,
         position=list(pos),
-        scale=[BALL_RADIUS, BALL_RADIUS, BALL_RADIUS],
+        scale=[RADIO_PELOTAS, RADIO_PELOTAS, RADIO_PELOTAS],
         material=mat,
-    )
+        )
+    pelota = Pelota(node_name=name, pos=pos, restitution=restitution)
+    controller.cant_pelotas += 1
+    return pelota
 
-    pelota = Pelota(
-        node_name=name,
-        pos=pos,
-        vel=vel,
-        ttl=10.0,           # 10 segundos de vida
-        material_name=material_name,
-    )
-    controller.pelotas.append(pelota)
-    print(f"[Spawn] {name} en posición {pos} | material: {material_name}")
+#fn para tener centro de plano y normal del nodo
+def get_platform_transform(world):
+    node = world['Plataforma']
+    center = np.array(node.get('position', [0,0,0]), dtype=np.float32)          # pos del centro de platfm en escena
+
+    theta = np.radians(30)                                                      #rotacion c/r eje X en 30°
+    c, s = np.cos(theta), np.sin(theta)                                         #para simplificar notacion
     
+    # Rotacion de matriz en X
+    R = np.array([
+        [1, 0, 0],
+        [0, c, -s],
+        [0, s, c]
+    ])
+    #normal local (0,1,0) rotada a escena
+    local_normal = np.array([0.0, 1.0, 0.0])
+    world_normal = R @ local_normal
+    world_normal = world_normal / np.linalg.norm(world_normal)
 
+    return center, world_normal
 
-
-#--------------------------------Constantes-------------------------------------#
-G = np.array([0.0, -1, 0.0])                                                              #Y>0 es hacia arriba
-BALL_RADIUS = 0.05                  # radio visual de la esfera en escena
 
 #--------------------------------Principal--------------------------------------#
 if __name__ == "__main__":
-
-    #controller/window
+    #ventana
     controller = Controller(1000,1000,"Auxiliar 8")
     controller.set_exclusive_mouse(True)
 
     root = os.path.dirname(__file__)
-
-    flat_pipeline = init_pipeline(root + "/flat.vert", root + "/flat.frag")     #pipeline con un flat shader
+    flat_pipeline = init_pipeline(root + "/flat.vert", root + "/flat.frag")     #pipeline
 
     cam = MyCam([0,1,0])                                                        #camara
-
     axis = init_axis(cam)                                                       #axis para mayor claridad
+    world = SceneGraph(cam)                                                     #inicio de escena
 
-    world = SceneGraph(cam)
-
-
-
-#--------------------------------Mallas-----------------------------------------#
-    #Plataforma
+    #--------------------------------Mallas-------------------------------------#
+    #Creacion de plataforma
     n = 50
-    vertices = []
-    normals = []
-    #generar vertices y normales
-    for i in range(n):
+    vertices, normals = [], []
+    for i in range(n):                                                          #generar vertices y normales
         for j in range(n):
             vertices += [j, 0, i]
             normals += [0, 1, 0]
@@ -158,33 +181,28 @@ if __name__ == "__main__":
         for j in range(n-1):
             indices += [n*(i+1) + j + 1, n*i + j + 1, n * i + j]
             indices += [n*(i+1) + j, n*(i+1) + j + 1, n * i + j]
-    #hacer ruido random
+    #generar ruidos
     for i in range(n*n*2):
         vertices[np.random.randint(0, n*n) * 3 + 1] += 1
-    #mas ruido
     for i in range(n*n):
         vertices[np.random.randint(0, n*n) * 3 + 1] += 2
+    
     # Creamos un trimesh object con la geometria
     tri = tm.Trimesh(vertices=np.array(vertices).reshape(len(vertices)//3, 3), faces=np.array(indices).reshape(len(indices)//3, 3), process=False)
-    # Sacamos las normales
-    betterNormals = np.array(tm.smoothing.get_vertices_normals(tri)).flatten()
-    # Filtro para el ruido
-    tri = tm.smoothing.filter_humphrey(tri)
-    #Necesario transformar esto
-    verticesT = np.array(tri.vertices, dtype=np.float32).flatten()
+    betterNormals = np.array(tm.smoothing.get_vertices_normals(tri)).flatten()  # sacar normales    
+    tri = tm.smoothing.filter_humphrey(tri)                                     # Filtro para el ruido
+    verticesT = np.array(tri.vertices, dtype=np.float32).flatten()              #extraer elementos
     facesT = np.array(tri.faces, dtype=np.float32).flatten()
     normalT = np.array(tri.vertex_normals, dtype=np.float32).flatten()
     uvs = []
     for i in range(n):
         for j in range(n):
             uvs += [0.0, 0.0]             
-    #hacemos el mesh como siempre
-    mesh_Plat = Model(verticesT, normal_data=normalT, index_data=facesT, uv_data=uvs)
+    mesh_Plat = Model(verticesT, normal_data=normalT, index_data=facesT, uv_data=uvs)   #malla de plataforma
 
 
-    # Esfera desde .obj
+    #Esfera desde .obj
     sphere_tm = tm.load(root+"/assets/sphere.obj")
-
     #almacenar vertices, caras y vectores normales de malla de esfera (vienen en .obj)
     sphere_verts = np.array(sphere_tm.vertices, dtype=np.float32).flatten()
     sphere_faces = np.array(sphere_tm.faces, dtype=np.float32).flatten()
@@ -192,74 +210,101 @@ if __name__ == "__main__":
     sphere_uvs = [0.0, 0.0] *len(sphere_tm.vertices)
 
     # Ambos meshes usan la misma geometría; el material se setea en el nodo del grafo
-    ball_mesh_rubber = Model(sphere_verts, normal_data=sphere_normals,
-                             index_data=sphere_faces, uv_data=sphere_uvs)
-    ball_mesh_metal  = Model(sphere_verts, normal_data=sphere_normals,
-                             index_data=sphere_faces, uv_data=sphere_uvs)
+    mesh_ball = Model(
+        sphere_verts,
+        normal_data=sphere_normals,
+        index_data=sphere_faces,
+        uv_data=sphere_uvs
+        )
 
-#----------------------------Posiciones de Spawn----------------------------#
-    # La plataforma está escalada a 0.1 y centrada en [0,0,0].
-    # El borde superior (y más alto del terreno suavizado) queda aprox. en y≈0.3
-    # Las tres posiciones cubren izquierda, centro y derecha del eje X de la plataforma.
-    SPAWN_Y = 2.5       # altura desde la que caen (por encima de la plataforma)
-    SPAWN_Z = 0.25      # profundidad central de la plataforma (escala 0.1 * n/2 * 0.1)
+    #----------------------------Posiciones de Spawn----------------------------#
+    # Y,Z ctes; varía solo a lo largo de X
+    SPAWN_Y = 1.5
+    SPAWN_Z = -10
 
     spawn_positions = [
-        {"label": "Izquierda", "pos": np.array([-0.5, SPAWN_Y, SPAWN_Z]), "material": "rubber"},
-        {"label": "Centro",    "pos": np.array([ 0.25, SPAWN_Y, SPAWN_Z]), "material": "metal"},
-        {"label": "Derecha",   "pos": np.array([ 1.0,  SPAWN_Y, SPAWN_Z]), "material": "rubber"},
+        np.array([-2, SPAWN_Y, SPAWN_Z], dtype=np.float32),
+        np.array([0, SPAWN_Y, SPAWN_Z], dtype=np.float32),
+        np.array([2, SPAWN_Y, SPAWN_Z], dtype=np.float32)
     ]
 
-
-#--------------------------------Grafo de Escena-------------------------------------#
+    #--------------------------------Grafo de Escena----------------------------#
     #plataforma
-    world.add_node("Plataforma",
-                mesh=mesh_Plat,
-                mode=GL_TRIANGLES,
-                pipeline=flat_pipeline,
-                position=[0, 0, 0],
-                scale=[0.1, 0.1, 0.1],
-                rotation=[0, 0, np.radians(15)],
-                material=Material(ambient=[0.54, 0.27, 0.07],
-                                diffuse=[0.54, 0.27, 0.07])
-                )
-
+    world.add_node(
+        "Plataforma",
+        mesh=mesh_Plat,
+        mode=GL_TRIANGLES,
+        pipeline=flat_pipeline,
+        position=[-5, 0, -15],
+        scale=[0.25, 0.25, 0.25],
+        rotation=[np.radians(30), 0, 0],
+        material=Material(
+            ambient=[0.54, 0.27, 0.07],
+            diffuse=[0.54, 0.27, 0.07]
+            )
+    )
+    
     #luz
-    world.add_node("dirLight",
-                light=DirectionalLight(ambient=[.6, .6, .6],
-                                        diffuse=[.6, .6, .6]
-                                        ),
-                pipeline=flat_pipeline
-#                rotation=[-np.pi/4, 0, 0]
-                )
+    world.add_node(
+        'dirLight',
+        light=DirectionalLight(),
+        pipeline=flat_pipeline
+    )
+
+    #Nodo contenedor de pelotas
+    world.add_node('Pelotas')
+
+    #crear pelota inicial
+    pelota_flotante = make_floating_ball()
+
+    #-----------------------------------Eventos---------------------------------#
 
     @controller.event
     def on_draw():
         controller.clear()
         glClearColor(*(controller.sky_color * controller.intensity),1)
         glEnable(GL_DEPTH_TEST)
-        
         if controller.wireframe:
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
         else:
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
-
         axis.draw()
         world.draw()
 
     @controller.event
     def on_key_press(symbol, modifiers):
-        # Ciclar posición de spawn con flechas izquierda/derecha
+        global pelota_flotante
+
+        # recorrer posiciones de spawn con flechas izquierda/derecha
         if symbol == key.LEFT:
-            controller.spawn_index = (controller.spawn_index - 1) % len(spawn_positions)
+            controller.spawnPos_index = (controller.spawnPos_index - 1) % len(spawn_positions)
+            # Mover la pelota flotante a nueva pos
+            nueva_pos = spawn_positions[controller.spawnPos_index].copy()
+            pelota_flotante.pos = nueva_pos
+            world[pelota_flotante.node_name]['position'] = list(nueva_pos)
 
         elif symbol == key.RIGHT:
-            controller.spawn_index = (controller.spawn_index + 1) % len(spawn_positions)
+            controller.spawnPos_index = (controller.spawnPos_index + 1) % len(spawn_positions)
+            nueva_pos = spawn_positions[controller.spawnPos_index].copy()
+            pelota_flotante.pos = nueva_pos
+            world[pelota_flotante.node_name]['position'] = list(nueva_pos)
 
-        # Lanzar pelota desde la posición seleccionada
+        elif symbol == key.UP:                                                  # alternar material de próxima pelota
+            controller.material_index = (controller.material_index + 1) % len(MATERIALES)
+
+        elif symbol == key.DOWN:
+            controller.material_index = (controller.material_index - 1) % len(MATERIALES)
+
+        # Soltar pelota desde la posición seleccionada
         elif symbol == key.SPACE:
-            spawn_ball(world, controller, spawn_positions,
-                       ball_mesh_rubber, ball_mesh_metal)
+            # Soltar la pelota flotante actual
+            pelota_flotante.drop()
+            controller.pelotas.append(pelota_flotante)
+            #DEBUG
+#            print(f"[Drop] {pelota_flotante.node_name} | material: {pelota_flotante.material_name}")#DEBUG
+
+            # Dejar nueva pelota flotante
+            pelota_flotante = make_floating_ball()
 
     @controller.event
     def on_mouse_motion(x, y, dx, dy):
@@ -267,23 +312,28 @@ if __name__ == "__main__":
         cam.pitch += dy * .001
         cam.pitch = math.clamp(cam.pitch, -(np.pi/2 - 0.01), np.pi/2 - 0.01)
 
-
 #----------------------------------update---------------------------------------#
     def update(dt):
-        controller.time += dt
+#        global pelota_flotante
+        controller.time += dt                                                   #paso del tiempo
+
+        #tener plano de platfm
+        plane_point, plane_normal = get_platform_transform(world)
 
         to_remove = []
         for pelota in controller.pelotas:
-            pelota.step(dt)                                                     #actualizar pos de toda pelota
+            pelota.step(dt, plane_point, plane_normal)                          #actualizar pos de toda pelota
 
             if not pelota.alive():
                 to_remove.append(pelota)
             else:
                 world[pelota.node_name]['position'] = list(pelota.pos)
 
-        for pelota in to_remove:
+        for pelota in to_remove:                                                #eliminar pelotas muertas
             world.remove_node(pelota.node_name)
             controller.pelotas.remove(pelota)
+
+        world[pelota_flotante.node_name]['position'] = list(pelota_flotante.pos)#actualizar nodo de flotante
 
         world.update()
         axis.update()
