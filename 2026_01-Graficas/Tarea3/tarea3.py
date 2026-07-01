@@ -1,4 +1,5 @@
 #--------------------------------Librerias-------------------------------------#
+#para usar funciones de trimesh de colisiones, es necesario instalar la librería 'rtree'
 
 from pyglet.graphics.shader import Shader, ShaderProgram
 from pyglet.window import Window, key

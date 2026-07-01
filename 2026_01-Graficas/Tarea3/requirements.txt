@@ -1,0 +1,4 @@
+numpy
+pyglet
+trimesh
+rtree
