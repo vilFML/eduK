@@ -100,23 +100,27 @@ class Pelota:
         self.ttl -= dt
 
         #----------------Colision con malla de plataforma-----------------------#
-        closest_point, distance, face_id = tri_world.nearest.on_surface([self.pos])
+        #tener pto mas cercano a malla: fn devuelve punto, distancia, triangulo de pto
+        closest_point, distance, face_id = tri_world.nearest.on_surface([self.pos]) 
         closest_point = closest_point[0]
         distance = distance[0]
 
-        if face_id[0] is not None:
-            normal = tri_world.face_normals[face_id[0]]
-            if np.dot(normal, self.pos - closest_point) < 0:
-                normal = -normal
-        else:
+        if face_id[0] is not None:                                              #si pto esta en triangulo (existe cara)
+            normal = tri_world.face_normals[face_id[0]]                         #se toma su vector normal
+            if np.dot(normal, self.pos - closest_point) < 0:                    #si normal apunta en dirección opuesta
+                normal = -normal                                                #   invertir
+        else:                                                                   #caso borde: pto en vértice o arista
             normal = np.array([0, 1, 0], dtype=np.float32)
 
-        if distance < self.radio:
+        if distance < self.radio:                                               #condicion de colision (dist menor al radio)
+            #se desplaza fuera de la superficie
             correction = (self.radio - distance) * normal
             self.pos += correction
+
+            #tener comp normal de vel
             vn = np.dot(self.vel, normal)
-            if vn < 0:
-                self.vel -= (1 + self.restitution) * vn * normal
+            if vn < 0:                                                          #si se mueve hacia superficie (vector <0)
+                self.vel -= (1 + self.restitution) * vn * normal                #   aplicar rebote en direccion de normal
 
     #fn activa caida
     def drop(self):
@@ -150,7 +154,7 @@ def make_floating_ball():
 #--------------------------------Principal--------------------------------------#
 if __name__ == "__main__":
     #ventana
-    controller = Controller(1000,1000,"Auxiliar 8")
+    controller = Controller(1000,1000,"Tarea 3")
     controller.set_exclusive_mouse(True)
 
     root = os.path.dirname(__file__)
@@ -201,7 +205,7 @@ if __name__ == "__main__":
     sphere_normals = np.array(sphere_tm.vertex_normals, dtype=np.float32).flatten()
     sphere_uvs = [0.0, 0.0] *len(sphere_tm.vertices)
 
-    # Ambos meshes usan la misma geometría; el material se setea en el nodo del grafo
+    # mesh de pelotas usan la misma geometría, material se asigna en el nodo del grafo
     mesh_ball = Model(
         sphere_verts,
         normal_data=sphere_normals,
@@ -236,12 +240,10 @@ if __name__ == "__main__":
             )
     )
 
-    #obtener la transformación del nodo 'Plataforma'
-    matrix = world.get_transform('Plataforma')
-
-    #crear copia del mesh en coordenadas de la escena
-    tri_world = tri.copy()
-    tri_world.apply_transform(matrix)
+    #llevar malla de plataforma a 'espacio' de escena: Necesario para distancias en el mismo 'contexto' de escena
+    matrix = world.get_transform('Plataforma')                                  #obtener matriz de transfm 4x4 del nodo en el grafo
+    tri_world = tri.copy()                                                      #guardar malla en coordenadas de la escena
+    tri_world.apply_transform(matrix)                                           #aplicar transfm a malla
     
     #luz
     world.add_node(
@@ -280,27 +282,23 @@ if __name__ == "__main__":
             nueva_pos = spawn_positions[controller.spawnPos_index].copy()
             pelota_flotante.pos = nueva_pos
             world[pelota_flotante.node_name]['position'] = list(nueva_pos)
-
         elif symbol == key.RIGHT:
             controller.spawnPos_index = (controller.spawnPos_index + 1) % len(spawn_positions)
             nueva_pos = spawn_positions[controller.spawnPos_index].copy()
             pelota_flotante.pos = nueva_pos
             world[pelota_flotante.node_name]['position'] = list(nueva_pos)
 
-        elif symbol == key.UP:                                                  # alternar material de próxima pelota
+        # alternar material de próxima pelota
+        elif symbol == key.UP:
             controller.material_index = (controller.material_index + 1) % len(MATERIALES)
-#            world[pelota_flotante.node_name]['material'] = MATERIALES[controller.material_index][2]
-
         elif symbol == key.DOWN:
             controller.material_index = (controller.material_index - 1) % len(MATERIALES)
-#            world[pelota_flotante.node_name]['material'] = MATERIALES[controller.material_index][2]
 
         # Soltar pelota desde la posición seleccionada
         elif symbol == key.SPACE:
             # Soltar la pelota flotante actual
             pelota_flotante.drop()
             controller.pelotas.append(pelota_flotante)
-            #DEBUG
 
             # Dejar nueva pelota flotante
             pelota_flotante = make_floating_ball()
@@ -334,7 +332,7 @@ if __name__ == "__main__":
 
         to_remove = []
         for pelota in controller.pelotas:
-            pelota.step(dt)                                  #actualizar pos de toda pelota, segun colisiones
+            pelota.step(dt)                                                     #actualizar pos de pelota viva
 
             if not pelota.alive():
                 to_remove.append(pelota)
